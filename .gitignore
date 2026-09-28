@@ -1,0 +1,15 @@
+# Environments & Secrets
+.env
+venv/
+.venv/
+
+# Data & Spark Output (CRITICAL: Never commit data)
+data/
+spark-warehouse/
+derby.log
+metastore_db/
+
+# Python Caches
+__pycache__/
+*.pyc
+.pytest_cache/
