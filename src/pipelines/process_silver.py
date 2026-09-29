@@ -42,10 +42,10 @@ def process_silver_data():
         "rag_text",
         concat_ws(
             " | ",
-            lit("Product: ") + col("product"),
-            lit("Sub-product: ") + when(col("sub-product").isNull(), lit("N/A")).otherwise(col("sub-product")),
+            lit("Product: ") , col("product"),
+            lit("Sub-product: ") , when(col("sub-product").isNull(), lit("N/A")).otherwise(col("sub-product")),
             lit("Issue: ") + col("issue"),
-            lit("Company Response: ") + when(col("company_response_to_consumer").isNull(), lit("N/A")).otherwise(col("company_response_to_consumer"))
+            lit("Company Response: ") , when(col("company_response_to_consumer").isNull(), lit("N/A")).otherwise(col("company_response_to_consumer"))
         )
     )
     
