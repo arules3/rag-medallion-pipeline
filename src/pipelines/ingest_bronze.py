@@ -2,18 +2,22 @@ import logging
 import sys 
 from pyspark.sql.functions import current_timestamp , lit , col
 from great_expectations.dataset import SparkDFDataset
+
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from src.utils.spark_session import get_spark_session
-logging.basicConfig(level=logging.INFO , format='%(asctime)s - %(levelname)s - %(message)s')
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def run_bronze_ingestion():
     spark = get_spark_session("BronzeIngestion")
     raw_path = "data/raw/complaints.csv"
     bronze_path = "data/bronze/complaints.parquet"
     
-    logging.info(f"reading raw data from {raw_path}")
+    logger.info(f"reading raw data from {raw_path}")
     df = spark.read.csv(raw_path , header=True , inferSchema=True)
     df.printSchema()
     
@@ -24,7 +28,7 @@ def run_bronze_ingestion():
     df = df.toDF(*normalized_columns)
     
     # 2. GREAT EXPECTATIONS QUALITY GATE
-    logging.info("Running Bronze Quality Gate...")
+    logger.info("Running Bronze Quality Gate...")
     gx_df = SparkDFDataset(df)
     
     # Contract Check 1: Primary Key must exist
@@ -42,17 +46,17 @@ def run_bronze_ingestion():
         logging.error(f"Schema normalization failed to satisfy contract. Found columns: {df.columns}")
         raise ValueError("Raw data violates the ingestion data contract.")
 
-    logging.info("Quality Gate Passed.")
+    logger.info("Quality Gate Passed.")
 
     # 3. ADD AUDIT METADATA
     df_bronze = df.withColumn("ingested_at", current_timestamp()) \
                   .withColumn("source_system", lit("CFPB_API"))
 
     # 4. WRITE TO BRONZE
-    logging.info(f"Writing validated data to Bronze layer at {bronze_path}")
+    logger.info(f"Writing validated data to Bronze layer at {bronze_path}")
     df_bronze.write.mode("overwrite").parquet(bronze_path)
     
-    logging.info("Bronze ingestion complete.")
+    logger.info("Bronze ingestion complete.")
     spark.stop()
     
 if __name__ == "__main__" :
