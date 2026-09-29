@@ -1,6 +1,6 @@
 import logging
 import sys 
-from pyspark.sql.functions import current_timestamp , lit , col
+from pyspark.sql.functions import current_timestamp , lit , col, trim
 from great_expectations.dataset import SparkDFDataset
 
 import os
@@ -18,7 +18,7 @@ def run_bronze_ingestion():
     bronze_path = "data/bronze/complaints.parquet"
     
     logger.info(f"reading raw data from {raw_path}")
-    df = spark.read.csv(raw_path , header=True , inferSchema=True)
+    df = spark.read.csv(raw_path , header=True , inferSchema=True , multiLine=True, quote='"', escape='"', ignoreLeadingWhiteSpace=True , ignoreTrailingWhiteSpace=True)
     df.printSchema()
     
     # 1. DYNAMIC SCHEMA NORMALIZATION
@@ -51,6 +51,10 @@ def run_bronze_ingestion():
     # 3. ADD AUDIT METADATA
     df_bronze = df.withColumn("ingested_at", current_timestamp()) \
                   .withColumn("source_system", lit("CFPB_API"))
+    
+    
+    #df_bronze= df.withColumn("complaint_id" , trim(col("complaint_id")))
+        
 
     # 4. WRITE TO BRONZE
     logger.info(f"Writing validated data to Bronze layer at {bronze_path}")
