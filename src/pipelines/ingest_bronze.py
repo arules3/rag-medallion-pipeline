@@ -1,15 +1,19 @@
 import logging
 import sys 
 from pyspark.sql.functions import current_timestamp , lit , col, trim
-from great_expectations.dataset import SparkDFDataset
+import great_expectations as gx
+import great_expectations.expectations as gxe
+
 
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from src.utils.spark_session import get_spark_session
 from src.utils.logger import get_logger
+from src.utils.quality_gate import QualityGate
 
 logger = get_logger(__name__)
+
 
 
 def run_bronze_ingestion():
@@ -29,21 +33,19 @@ def run_bronze_ingestion():
     
     # 2. GREAT EXPECTATIONS QUALITY GATE
     logger.info("Running Bronze Quality Gate...")
-    gx_df = SparkDFDataset(df)
-    
-    # Contract Check 1: Primary Key must exist
-    res_id = gx_df.expect_column_to_exist("complaint_id")
-    
-    # Contract Check 2: Core fields for our RAG system must exist
-    res_issue = gx_df.expect_column_to_exist("issue")
-    res_company = gx_df.expect_column_to_exist("company")
-    
-    # Contract Check 3: Primary key must not be null
-    res_not_null = gx_df.expect_column_values_to_not_be_null("complaint_id")
+    passed = QualityGate.validate(
+        df = df,
+        suite_name="bronze_contract",
+        expectations=[
+        gxe.ExpectColumnToExist(column="complaint_id"),
+        gxe.ExpectColumnToExist(column="issue"),
+        gxe.ExpectColumnToExist(column="company"),
+        gxe.ExpectColumnValuesToNotBeNull(column="complaint_id"),
+        ])
 
-    # Evaluate Gate
-    if not (res_id["success"] and res_issue["success"] and res_company["success"] and res_not_null["success"]):
-        logging.error(f"Schema normalization failed to satisfy contract. Found columns: {df.columns}")
+
+    if not passed:
+        logger.error("Data contract failed validation against Great Expectations suite.")
         raise ValueError("Raw data violates the ingestion data contract.")
 
     logger.info("Quality Gate Passed.")
@@ -52,8 +54,6 @@ def run_bronze_ingestion():
     df_bronze = df.withColumn("ingested_at", current_timestamp()) \
                   .withColumn("source_system", lit("CFPB_API"))
     
-    
-    #df_bronze= df.withColumn("complaint_id" , trim(col("complaint_id")))
         
 
     # 4. WRITE TO BRONZE

@@ -2,12 +2,14 @@ import os
 import sys
 
 from pyspark.sql.functions import col ,concat_ws , trim , lit , when , current_timestamp
-from great_expectations.dataset import SparkDFDataset
+
+import great_expectations.expectations as gxe
 
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__) , "../..")))
 from src.utils.spark_session import get_spark_session
 from src.utils.logger import get_logger
+from  src.utils.quality_gate import QualityGate
 
 logger = get_logger(__name__)
 
@@ -44,7 +46,7 @@ def process_silver_data():
             " | ",
             lit("Product: ") , col("product"),
             lit("Sub-product: ") , when(col("sub-product").isNull(), lit("N/A")).otherwise(col("sub-product")),
-            lit("Issue: ") + col("issue"),
+            lit("Issue: ") , col("issue"),
             lit("Company Response: ") , when(col("company_response_to_consumer").isNull(), lit("N/A")).otherwise(col("company_response_to_consumer"))
         )
     )
@@ -53,13 +55,19 @@ def process_silver_data():
     #3. Silver Quality Gate
     
     logger.info("Running Silver Quality Gate...")
-    gx_df = SparkDFDataset(df_silver)
+    passed = QualityGate.validate(
+        df =  df_silver,
+        suite_name="silver_contract",
+        expectations=[
+            gxe.ExpectColumnToExist(column = "rag_text"),
+            gxe.ExpectColumnValuesToNotBeNull(column = "rag_text")
+            
+        ]
+        
+    )
     
-    # Check that our synthesized text column exists and has no nulls
-    res_text_exists = gx_df.expect_column_to_exist("rag_text")
-    res_text_not_null = gx_df.expect_column_values_to_not_be_null("rag_text")
     
-    if not (res_text_exists["success"] and res_text_not_null["success"]):
+    if not passed:
         logger.error("Silver Data Quality Gate Failed! RAG text field is invalid.")
         raise ValueError("Silver layer data contract violated.")
     
